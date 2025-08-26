@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Spring Boot Logback Configuration for Kafka Worker Library
+    
+    This configuration provides Spring Boot specific features like:
+    - Profile-based logging levels
+    - Spring Boot color patterns
+    - Cloud-friendly JSON logging
+    - Application name from Spring properties
+    
+    This file takes precedence over logback.xml in Spring Boot applications.
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    
+    <!-- Spring Boot Properties -->
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="kafka-app"/>
+    <springProperty scope="context" name="logDir" source="logging.file.path" defaultValue="logs"/>
+    
+    <!-- Console Appender with Spring Boot Colors and MDC Context -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- Spring Boot style with MDC context highlighting -->
+            <pattern>%clr(%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr([%X{messageId:-},%X{topic:-}]){cyan} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+    
+    <!-- File Appender with Complete MDC Context -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${appName}.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [messageId=%X{messageId:-}, topic=%X{topic:-}, partition=%X{partition:-}, offset=%X{offset:-}, key=%X{messageKey:-}, subscription=%X{subscriptionId:-}, handler=%X{handlerType:-}] %logger{50} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${logDir}/${appName}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>5GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- JSON Appender for Cloud/Container Logging -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${appName}-json.log</file>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp/>
+                <logLevel/>
+                <loggerName/>
+                <message/>
+                <mdc/>
+                <stackTrace/>
+                <pattern>
+                    <pattern>
+                        {
+                            "app": "${appName}",
+                            "pid": "${PID:-}",
+                            "thread": "%thread"
+                        }
+                    </pattern>
+                </pattern>
+            </providers>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${logDir}/${appName}-json.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- Error File with Comprehensive Context -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logDir}/${appName}-error.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level
+=== APPLICATION CONTEXT ===
+App Name     : ${appName}
+PID          : ${PID:-N/A}
+Profile      : %property{spring.profiles.active}
+=== KAFKA MESSAGE CONTEXT ===
+MessageID    : %X{messageId:-N/A}
+Topic        : %X{topic:-N/A}
+Partition    : %X{partition:-N/A}
+Offset       : %X{offset:-N/A}
+Message Key  : %X{messageKey:-N/A}
+Subscription : %X{subscriptionId:-N/A}
+Handler Type : %X{handlerType:-N/A}
+=== ERROR DETAILS ===
+Logger: %logger{60}
+Error : %msg
+%ex{full}
+=====================================
+
+</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${logDir}/${appName}-error.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>60</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- Async Appenders -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="FILE" />
+        <queueSize>512</queueSize>
+        <discardingThreshold>20</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+    </appender>
+    
+    <appender name="ASYNC_ERROR" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="ERROR_FILE" />
+        <queueSize>256</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <includeCallerData>true</includeCallerData>
+    </appender>
+    
+    <!-- Conditional JSON Appender for Cloud Profile -->
+    <springProfile name="cloud,kubernetes,prod">
+        <appender name="ASYNC_JSON" class="ch.qos.logback.classic.AsyncAppender">
+            <appender-ref ref="JSON_FILE" />
+            <queueSize>512</queueSize>
+            <discardingThreshold>10</discardingThreshold>
+            <includeCallerData>false</includeCallerData>
+        </appender>
+    </springProfile>
+    
+    <!-- Logger Configurations -->
+    
+    <!-- Kafka Worker Library -->
+    <logger name="com.adobe.kafka" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ASYNC_ERROR" />
+        <springProfile name="cloud,kubernetes,prod">
+            <appender-ref ref="ASYNC_JSON" />
+        </springProfile>
+    </logger>
+    
+    <!-- Centralized Logging Components -->
+    <logger name="com.adobe.kafka.logging" additivity="false">
+        <!-- Debug level for development, info for production -->
+        <springProfile name="dev,local,test">
+            <level>DEBUG</level>
+        </springProfile>
+        <springProfile name="!dev,!local,!test">
+            <level>INFO</level>
+        </springProfile>
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ASYNC_ERROR" />
+        <springProfile name="cloud,kubernetes,prod">
+            <appender-ref ref="ASYNC_JSON" />
+        </springProfile>
+    </logger>
+    
+    <!-- Spring Kafka Framework -->
+    <logger name="org.springframework.kafka" level="INFO" additivity="false">
+        <springProfile name="dev,local">
+            <appender-ref ref="CONSOLE" />
+        </springProfile>
+        <appender-ref ref="ASYNC_FILE" />
+        <springProfile name="cloud,kubernetes,prod">
+            <appender-ref ref="ASYNC_JSON" />
+        </springProfile>
+    </logger>
+    
+    <!-- Apache Kafka Clients -->
+    <logger name="org.apache.kafka" level="WARN" additivity="false">
+        <springProfile name="dev,local">
+            <appender-ref ref="CONSOLE" />
+        </springProfile>
+        <appender-ref ref="ASYNC_FILE" />
+    </logger>
+    
+    <!-- Profile-specific root logger configurations -->
+    <springProfile name="dev,local,test">
+        <root level="DEBUG">
+            <appender-ref ref="CONSOLE" />
+            <appender-ref ref="ASYNC_FILE" />
+            <appender-ref ref="ASYNC_ERROR" />
+        </root>
+    </springProfile>
+    
+    <springProfile name="!dev,!local,!test">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE" />
+            <appender-ref ref="ASYNC_FILE" />
+            <appender-ref ref="ASYNC_ERROR" />
+            <springProfile name="cloud,kubernetes,prod">
+                <appender-ref ref="ASYNC_JSON" />
+            </springProfile>
+        </root>
+    </springProfile>
+    
+    <!-- Health check endpoint logging -->
+    <logger name="org.springframework.boot.actuate.endpoint.web.servlet" level="WARN"/>
+    <logger name="org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping" level="WARN"/>
+    
+</configuration>

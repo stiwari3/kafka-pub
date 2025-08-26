@@ -1,0 +1,46 @@
+# Kafka Worker Library Configuration Template
+# Copy these properties to your application.yml or application.properties file
+
+adobe:
+  kafka:
+    # Kafka cluster configuration
+    bootstrap-servers: localhost:9092
+    default-consumer-group: your-app-consumer-group
+    
+    # Producer configuration
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      batch-size: 16384
+      linger-ms: 5
+      buffer-memory: 33554432
+      compression-type: snappy
+      enable-idempotence: true
+      max-in-flight-requests-per-connection: 5
+      request-timeout-ms: 30000
+      properties:
+        # Additional producer properties
+        # max.request.size: 1048576
+    
+    # Consumer configuration
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      session-timeout-ms: 30000
+      heartbeat-interval-ms: 3000
+      max-poll-records: 500
+      max-poll-interval-ms: 300000
+      fetch-min-bytes: 1
+      fetch-max-wait-ms: 500
+      properties:
+        # Additional consumer properties
+        # spring.json.trusted.packages: "com.yourcompany.model"
+    
+    # Additional global properties
+    properties:
+      # security.protocol: SASL_SSL
+      # sasl.mechanism: PLAIN

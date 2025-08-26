@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+    Advanced Logback Customization Example for Kafka Worker Library
+    
+    The Kafka Worker Library provides default logging configurations (logback.xml and logback-spring.xml)
+    that automatically handle MDC context formatting. Clients don't need any logging configuration!
+    
+    This file is an ADVANCED CUSTOMIZATION EXAMPLE for clients who want to:
+    - Override the default logging behavior
+    - Add custom appenders (e.g., Elasticsearch, Splunk, etc.)
+    - Implement custom log formatting
+    - Add application-specific logging rules
+    
+    To use this as a starting point for customization:
+    1. Copy this file to your application's resources directory
+    2. Rename it to logback-spring.xml (for Spring Boot) or logback.xml
+    3. Customize as needed - this will override the library's default configuration
+    
+    WARNING: Using this file means you take full responsibility for MDC context formatting!
+-->
+<configuration>
+    
+    <!-- EXAMPLE: Custom Console appender with MDC context -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <!-- Pattern includes all MDC keys for message tracking -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{messageId:-},%X{topic:-},%X{partition:-},%X{offset:-},%X{messageKey:-},%X{subscriptionId:-},%X{handlerType:-}] %logger{36} - %msg%n</pattern>
+            
+            <!-- Alternative compact pattern -->
+            <!-- <pattern>%d{HH:mm:ss.SSS} %-5level [%X{messageId:-}] %logger{20} - %msg%n</pattern> -->
+            
+            <!-- Alternative JSON pattern for structured logging -->
+            <!-- 
+            <pattern>{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}","level":"%level","thread":"%thread","logger":"%logger","message":"%message","messageId":"%X{messageId:-}","topic":"%X{topic:-}","partition":"%X{partition:-}","offset":"%X{offset:-}","messageKey":"%X{messageKey:-}","subscriptionId":"%X{subscriptionId:-}","handlerType":"%X{handlerType:-}"}%n
+            </pattern>
+            -->
+        </encoder>
+    </appender>
+    
+    <!-- EXAMPLE: Elasticsearch Appender for centralized logging -->
+    <!--
+    <appender name="ELASTICSEARCH" class="com.internetitem.logback.elasticsearch.ElasticsearchAppender">
+        <url>http://elasticsearch:9200/_bulk</url>
+        <index>kafka-logs-%date{yyyy-MM-dd}</index>
+        <type>log</type>
+        <includeMdc>true</includeMdc>
+        <properties>
+            <property>
+                <name>application</name>
+                <value>${APP_NAME:-kafka-app}</value>
+            </property>
+        </properties>
+    </appender>
+    -->
+    
+    <!-- EXAMPLE: Splunk HEC Appender -->
+    <!--
+    <appender name="SPLUNK" class="com.splunk.logging.SplunkCimLogbackAppender">
+        <url>https://splunk.example.com:8088/services/collector/event/1.0</url>
+        <token>your-hec-token</token>
+        <source>kafka-worker</source>
+        <sourcetype>json</sourcetype>
+        <index>main</index>
+        <includeMdc>true</includeMdc>
+        <batch_size_bytes>5242880</batch_size_bytes>
+        <batch_size_count>10</batch_size_count>
+        <batch_interval>10000</batch_interval>
+    </appender>
+    -->
+    
+    <!-- File appender with MDC context for persistent logging -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/kafka-worker.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <!-- Detailed pattern for file logging -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [messageId=%X{messageId:-}, topic=%X{topic:-}, partition=%X{partition:-}, offset=%X{offset:-}, messageKey=%X{messageKey:-}, subscription=%X{subscriptionId:-}, handler=%X{handlerType:-}] %logger{50} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/kafka-worker.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>3GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- JSON file appender for structured logging (useful for log aggregation systems) -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/kafka-worker-json.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}","level":"%level","thread":"%thread","logger":"%logger","message":"%replace(%msg){'\"','\\\"'}","messageId":"%X{messageId:-}","topic":"%X{topic:-}","partition":"%X{partition:-}","offset":"%X{offset:-}","messageKey":"%X{messageKey:-}","subscriptionId":"%X{subscriptionId:-}","handlerType":"%X{handlerType:-}","exception":"%replace(%ex){'\"','\\\"'}"}%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/kafka-worker-json.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>3GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- Separate appender for trackable exceptions -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/kafka-worker-errors.log</file>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <!-- Detailed error pattern with full MDC context and stack trace -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] ERROR
+--- MESSAGE CONTEXT ---
+MessageID: %X{messageId:-N/A}
+Topic: %X{topic:-N/A}
+Partition: %X{partition:-N/A}
+Offset: %X{offset:-N/A}
+MessageKey: %X{messageKey:-N/A}
+SubscriptionID: %X{subscriptionId:-N/A}
+HandlerType: %X{handlerType:-N/A}
+--- ERROR DETAILS ---
+Logger: %logger{50}
+Message: %msg
+%ex{full}
+--- END ERROR ---
+
+</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/kafka-worker-errors.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>60</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- Async appender for better performance -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="FILE" />
+        <queueSize>512</queueSize>
+        <discardingThreshold>20</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+    </appender>
+    
+    <!-- EXAMPLE: Custom Logger Configurations -->
+    
+    <!-- Kafka Worker Library loggers with custom appenders -->
+    <logger name="com.adobe.kafka" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ERROR_FILE" />
+        <appender-ref ref="JSON_FILE" />
+        <!-- Add custom appenders here -->
+        <!-- <appender-ref ref="ELASTICSEARCH" /> -->
+        <!-- <appender-ref ref="SPLUNK" /> -->
+    </logger>
+    
+    <!-- EXAMPLE: Application-specific package with custom log levels -->
+    <logger name="com.mycompany.kafka.handlers" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+    </logger>
+    
+    <!-- EXAMPLE: Third-party service integration with specific appender -->
+    <logger name="com.mycompany.services.external" level="WARN" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ERROR_FILE" />
+        <!-- Send external service errors to specific monitoring system -->
+        <!-- <appender-ref ref="SPLUNK" /> -->
+    </logger>
+    
+    <!-- Centralized logging components -->
+    <logger name="com.adobe.kafka.logging" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ERROR_FILE" />
+    </logger>
+    
+    <!-- Client application loggers (examples) -->
+    <logger name="com.adobe.kafka.examples" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ERROR_FILE" />
+    </logger>
+    
+    <!-- Spring Kafka framework loggers -->
+    <logger name="org.springframework.kafka" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+    </logger>
+    
+    <!-- Apache Kafka client loggers -->
+    <logger name="org.apache.kafka" level="WARN" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+    </logger>
+    
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ERROR_FILE" />
+    </root>
+    
+    <!-- 
+        MDC Key Reference:
+        - messageId: Unique identifier for the message processing session (e.g., msg-a1b2c3d4)
+        - topic: Kafka topic name
+        - partition: Partition number
+        - offset: Message offset
+        - messageKey: The message key (shows "null" if not present)
+        - subscriptionId: Subscription ID processing this message (e.g., sub-xyz)
+        - handlerType: Type of handler processing the message (e.g., MessageHandler, ErrorAwareMessageHandler)
+    -->
+    
+</configuration>

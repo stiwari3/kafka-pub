@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Default Logback Configuration for Kafka Worker Library
+    
+    This configuration is automatically applied to applications using this library.
+    It provides automatic MDC context inclusion for all Kafka message processing logs
+    without requiring any client configuration.
+    
+    Key Features:
+    - Automatic MDC context in all log entries during message processing
+    - Color-coded console output for development
+    - Rolling file appender for production
+    - Separate error log file for quick issue identification
+    - Performance-optimized async appenders
+    
+    Clients can override this configuration by providing their own logback.xml
+    or extend it using logback's <include> functionality.
+-->
+<configuration>
+    
+    <!-- Define log directory - can be overridden with system property -->
+    <property name="LOG_DIR" value="${LOG_DIR:-logs}" />
+    <property name="APP_NAME" value="${spring.application.name:-kafka-app}" />
+    
+    <!-- Console Appender with Color and MDC Context -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <!-- Color-coded pattern with automatic MDC context for development -->
+            <pattern>%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr([%X{messageId:-}]){cyan} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Main Application Log File with Full MDC Context -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${APP_NAME}.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <!-- Detailed pattern for file logging with all MDC context -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [messageId=%X{messageId:-}, topic=%X{topic:-}, partition=%X{partition:-}, offset=%X{offset:-}, key=%X{messageKey:-}] %logger{50} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/${APP_NAME}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>5GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- Error Log File with Comprehensive Context -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${APP_NAME}-error.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <!-- Comprehensive error pattern with full MDC context and stack traces -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level
+=== KAFKA MESSAGE CONTEXT ===
+MessageID    : %X{messageId:-N/A}
+Topic        : %X{topic:-N/A} 
+Partition    : %X{partition:-N/A}
+Offset       : %X{offset:-N/A}
+Message Key  : %X{messageKey:-N/A}
+Subscription : %X{subscriptionId:-N/A}
+Handler Type : %X{handlerType:-N/A}
+=== ERROR DETAILS ===
+Logger: %logger{60}
+Error : %msg
+%ex
+=====================================
+
+</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/${APP_NAME}-error.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>60</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- Kafka Message Processing Log - Structured for Easy Analysis -->
+    <appender name="KAFKA_PROCESSING" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${APP_NAME}-kafka.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <!-- Structured format optimized for Kafka message processing analysis -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS}|%level|%X{messageId:-}|%X{topic:-}|%X{partition:-}|%X{offset:-}|%X{messageKey:-}|%X{subscriptionId:-}|%X{handlerType:-}|%logger{30}|%msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/${APP_NAME}-kafka.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>3GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- Async Appenders for Better Performance -->
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="FILE" />
+        <queueSize>512</queueSize>
+        <discardingThreshold>20</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+    </appender>
+    
+    <appender name="ASYNC_ERROR" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="ERROR_FILE" />
+        <queueSize>256</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <includeCallerData>true</includeCallerData>
+    </appender>
+    
+    <appender name="ASYNC_KAFKA" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="KAFKA_PROCESSING" />
+        <queueSize>512</queueSize>
+        <discardingThreshold>10</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+    </appender>
+    
+    <!-- Logger Configurations -->
+    
+    <!-- Kafka Worker Library - All messages with full context -->
+    <logger name="com.adobe.kafka" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ASYNC_ERROR" />
+        <appender-ref ref="ASYNC_KAFKA" />
+    </logger>
+    
+    <!-- Centralized Logging Components - Debug level for troubleshooting -->
+    <logger name="com.adobe.kafka.logging" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ASYNC_ERROR" />
+        <appender-ref ref="ASYNC_KAFKA" />
+    </logger>
+    
+    <!-- Spring Kafka Framework -->
+    <logger name="org.springframework.kafka" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ASYNC_KAFKA" />
+    </logger>
+    
+    <!-- Apache Kafka Clients -->
+    <logger name="org.apache.kafka" level="WARN" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+    </logger>
+    
+    <!-- Suppress noisy Spring logs in production -->
+    <logger name="org.springframework.boot.autoconfigure" level="WARN" />
+    <logger name="org.springframework.boot.actuate" level="WARN" />
+    <logger name="org.springframework.security" level="WARN" />
+    
+    <!-- Root Logger - Catches all other application logs -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
+        <appender-ref ref="ASYNC_ERROR" />
+    </root>
+    
+</configuration>
